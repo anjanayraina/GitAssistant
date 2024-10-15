@@ -30,7 +30,7 @@ def merge_branches(repo_path, branch_to_merge):
         repo.git.merge(branch_to_merge)
         print(f"Branch '{branch_to_merge}' merged successfully into '{current_branch}'.")
     except GitCommandError as e:
-        if 'Merge conflict' in str(e):
+        if 'CONFLICT' in str(e):
             print(f"Merge conflict detected.")
             handle_merge_conflicts(repo)
         else:
@@ -38,8 +38,8 @@ def merge_branches(repo_path, branch_to_merge):
 
 def handle_merge_conflicts(repo):
     """
-    Handles merge conflicts by listing conflicting files and extracting conflicting lines.
-    Allows the user to choose which version to keep.
+    Handles merge conflicts by listing conflicting files and extracting conflicting blocks.
+    Allows the user to choose which version to keep for each block.
 
     :param repo: Repo object representing the Git repository
     """
@@ -52,7 +52,7 @@ def handle_merge_conflicts(repo):
             print(f" - {file_path}")
             full_file_path = os.path.join(repo.working_tree_dir, file_path)
             if os.path.isfile(full_file_path):
-                resolved = extract_and_resolve_conflicts(full_file_path)
+                resolved = extract_and_resolve_conflicts_block_by_block(full_file_path)
                 if resolved:
                     resolved_files.append(file_path)
                 else:
@@ -74,9 +74,9 @@ def handle_merge_conflicts(repo):
     else:
         print("No conflicts were resolved.")
 
-def extract_and_resolve_conflicts(file_path):
+def extract_and_resolve_conflicts_block_by_block(file_path):
     """
-    Extracts conflicting sections from a file and resolves them based on user input.
+    Extracts conflicting blocks from a file and resolves them based on user input for each block.
 
     :param file_path: Path to the conflicting file
     :return: True if conflicts were resolved, False otherwise
@@ -103,21 +103,21 @@ def extract_and_resolve_conflicts(file_path):
                 }
 
                 i += 1
-                # Collect 'ours' lines
+                # Collect 'ours' block
                 while i < len(lines) and not lines[i].startswith(conflict_mid):
                     conflict_block['ours'].append(lines[i])
                     i += 1
 
                 i += 1  # Skip the '=======' line
 
-                # Collect 'theirs' lines
+                # Collect 'theirs' block
                 while i < len(lines) and not lines[i].startswith(conflict_end):
                     conflict_block['theirs'].append(lines[i])
                     i += 1
 
                 i += 1  # Skip the '>>>>>>>' line
 
-                # Display the conflict to the user
+                # Display the conflict block to the user
                 print(f"\nConflict in file '{os.path.basename(file_path)}':")
                 print(">>> Current changes (in your branch):")
                 for idx, content in enumerate(conflict_block['ours'], start=1):
@@ -127,17 +127,31 @@ def extract_and_resolve_conflicts(file_path):
                 for idx, content in enumerate(conflict_block['theirs'], start=1):
                     print(f"Line {idx}: {content.rstrip()}")
 
-                # Ask the user which version to accept
+                # Ask the user which version to accept for this block
                 while True:
-                    choice = input("Choose which changes to keep? (o)urs, (t)heirs: ").lower()
+                    choice = input("Choose which changes to keep for this block? (o)urs, (t)heirs, (b)oth, (e)dit manually: ").lower()
                     if choice == 'o':
                         new_lines.extend(conflict_block['ours'])
                         break
                     elif choice == 't':
                         new_lines.extend(conflict_block['theirs'])
                         break
+                    elif choice == 'b':
+                        new_lines.extend(conflict_block['ours'])
+                        new_lines.extend(conflict_block['theirs'])
+                        break
+                    elif choice == 'e':
+                        print("Enter your custom changes for this block. Finish by entering a single '.' on a new line.")
+                        custom_block = []
+                        while True:
+                            user_line = input()
+                            if user_line == '.':
+                                break
+                            custom_block.append(user_line + '\n')
+                        new_lines.extend(custom_block)
+                        break
                     else:
-                        print("Invalid choice. Please enter 'o' for ours or 't' for theirs.")
+                        print("Invalid choice. Please enter 'o', 't', 'b', or 'e'.")
             else:
                 new_lines.append(line)
                 i += 1
