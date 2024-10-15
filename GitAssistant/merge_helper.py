@@ -30,33 +30,56 @@ def merge_branches(repo_path, branch_to_merge):
         repo.git.merge(branch_to_merge)
         print(f"Branch '{branch_to_merge}' merged successfully into '{current_branch}'.")
     except GitCommandError as e:
-        print(f"Merge conflict detected: {e}")
-        handle_merge_conflicts(repo)
+        if 'Merge conflict' in str(e):
+            print(f"Merge conflict detected.")
+            handle_merge_conflicts(repo)
+        else:
+            print(f"An error occurred during merge: {e}")
 
 def handle_merge_conflicts(repo):
     """
     Handles merge conflicts by listing conflicting files and extracting conflicting lines.
+    Allows the user to choose which version to keep.
 
     :param repo: Repo object representing the Git repository
     """
     print("\nConflicts detected in the following files:")
     conflicts = repo.index.unmerged_blobs()
+    resolved_files = []
+
     for file_path in conflicts.keys():
         if file_path:
             print(f" - {file_path}")
             full_file_path = os.path.join(repo.working_tree_dir, file_path)
             if os.path.isfile(full_file_path):
-                extract_conflicting_lines(full_file_path)
+                resolved = extract_and_resolve_conflicts(full_file_path)
+                if resolved:
+                    resolved_files.append(file_path)
+                else:
+                    print(f"Could not resolve conflicts in '{file_path}'.")
             else:
                 print(f"Error: '{full_file_path}' is not a valid file.")
         else:
             print("Warning: Encountered an empty file path in conflicts.")
 
-def extract_conflicting_lines(file_path):
+    if resolved_files:
+        # Add resolved files to the index
+        repo.git.add(resolved_files)
+        try:
+            # Commit the merge
+            repo.index.commit(f"Merge resolved by GitAssistant")
+            print("\nMerge conflicts resolved and committed.")
+        except Exception as e:
+            print(f"An error occurred while committing the merge: {e}")
+    else:
+        print("No conflicts were resolved.")
+
+def extract_and_resolve_conflicts(file_path):
     """
-    Extracts and displays conflicting lines from a file with merge conflicts.
+    Extracts conflicting sections from a file and resolves them based on user input.
 
     :param file_path: Path to the conflicting file
+    :return: True if conflicts were resolved, False otherwise
     """
     conflict_start = '<<<<<<<'
     conflict_mid = '======='
@@ -66,41 +89,67 @@ def extract_conflicting_lines(file_path):
         with open(file_path, 'r') as file:
             lines = file.readlines()
 
-        in_conflict = False
-        conflict_blocks = []
-        current_conflict = {'ours': [], 'theirs': []}
-        section = None
+        new_lines = []
+        i = 0
+        conflicts_found = False
 
-        for index, line in enumerate(lines):
-            stripped_line = line.strip()
-            if stripped_line.startswith(conflict_start):
-                in_conflict = True
-                section = 'ours'
-                continue
-            elif stripped_line.startswith(conflict_mid):
-                section = 'theirs'
-                continue
-            elif stripped_line.startswith(conflict_end):
-                in_conflict = False
-                conflict_blocks.append((index, current_conflict.copy()))
-                current_conflict = {'ours': [], 'theirs': []}
-                section = None
-                continue
+        while i < len(lines):
+            line = lines[i]
+            if line.startswith(conflict_start):
+                conflicts_found = True
+                conflict_block = {
+                    'ours': [],
+                    'theirs': []
+                }
 
-            if in_conflict and section:
-                current_conflict[section].append((index + 1, line.rstrip('\n')))
+                i += 1
+                # Collect 'ours' lines
+                while i < len(lines) and not lines[i].startswith(conflict_mid):
+                    conflict_block['ours'].append(lines[i])
+                    i += 1
 
-        # Display conflicting sections
-        if conflict_blocks:
-            for block_num, (line_num, conflict) in enumerate(conflict_blocks, start=1):
-                print(f"\nConflict {block_num} in file '{os.path.basename(file_path)}':")
+                i += 1  # Skip the '=======' line
+
+                # Collect 'theirs' lines
+                while i < len(lines) and not lines[i].startswith(conflict_end):
+                    conflict_block['theirs'].append(lines[i])
+                    i += 1
+
+                i += 1  # Skip the '>>>>>>>' line
+
+                # Display the conflict to the user
+                print(f"\nConflict in file '{os.path.basename(file_path)}':")
                 print(">>> Current changes (in your branch):")
-                for idx, content in conflict['ours']:
-                    print(f"Line {idx}: {content}")
+                for idx, content in enumerate(conflict_block['ours'], start=1):
+                    print(f"Line {idx}: {content.rstrip()}")
+
                 print(">>> Incoming changes (from the branch being merged):")
-                for idx, content in conflict['theirs']:
-                    print(f"Line {idx}: {content}")
+                for idx, content in enumerate(conflict_block['theirs'], start=1):
+                    print(f"Line {idx}: {content.rstrip()}")
+
+                # Ask the user which version to accept
+                while True:
+                    choice = input("Choose which changes to keep? (o)urs, (t)heirs: ").lower()
+                    if choice == 'o':
+                        new_lines.extend(conflict_block['ours'])
+                        break
+                    elif choice == 't':
+                        new_lines.extend(conflict_block['theirs'])
+                        break
+                    else:
+                        print("Invalid choice. Please enter 'o' for ours or 't' for theirs.")
+            else:
+                new_lines.append(line)
+                i += 1
+
+        if conflicts_found:
+            # Write the resolved content back to the file
+            with open(file_path, 'w') as file:
+                file.writelines(new_lines)
+            return True
         else:
             print(f"No conflict markers found in '{file_path}'.")
+            return False
     except Exception as e:
         print(f"Error reading file '{file_path}': {e}")
+        return False
