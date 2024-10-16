@@ -20,7 +20,7 @@ def merge_branches(repo_path, branch_to_merge):
 
     current_branch = repo.active_branch.name
     print(f"Attempting to merge '{branch_to_merge}' into '{current_branch}'...\n")
-
+    
     try:
         repo.git.merge(branch_to_merge)
         print(f"Branch '{branch_to_merge}' merged successfully into '{current_branch}'.")
@@ -59,7 +59,6 @@ def handle_merge_conflicts(repo):
         print("No conflicts were resolved.")
 
 def extract_and_resolve_conflicts_block_by_block(file_path):
-    """Extract and resolve merge conflicts block by block."""
     conflict_start = '<<<<<<<'
     conflict_mid = '======='
     conflict_end = '>>>>>>>'
@@ -77,20 +76,18 @@ def extract_and_resolve_conflicts_block_by_block(file_path):
             if line.startswith(conflict_start):
                 conflicts_found = True
 
-                # Extract "ours" block
                 conflict_block = {'ours': [], 'theirs': []}
                 i += 1
                 while i < len(lines) and not lines[i].startswith(conflict_mid):
                     conflict_block['ours'].append(lines[i])
                     i += 1
 
-                # Extract "theirs" block
                 i += 1
                 while i < len(lines) and not lines[i].startswith(conflict_end):
                     conflict_block['theirs'].append(lines[i])
                     i += 1
 
-                i += 1  # Skip the end marker (>>>>>>>)
+                i += 1  
 
                 # Show conflict block to the user
                 print("\nConflict detected in:")
