@@ -1,23 +1,20 @@
-
-
 import os
 from git import Repo, GitCommandError, InvalidGitRepositoryError
-from git.exc import GitCommandError, BadName
 
-
-def current_active_branch(repo_path) : 
+def current_active_branch(repo_path):
+    """Return the current active branch."""
     repo = Repo(repo_path)
     return repo.active_branch.name
 
 def merge_branches(repo_path, branch_to_merge):
-
+    """Merge a specified branch into the current branch."""
     try:
         repo = Repo(repo_path)
     except (InvalidGitRepositoryError, GitCommandError):
         print(f"Error: {repo_path} is not a valid Git repository.")
         return
 
-    if branch_to_merge not in repo.branches:
+    if branch_to_merge not in [b.name for b in repo.branches]:
         print(f"Branch '{branch_to_merge}' does not exist in this repository.")
         return
 
@@ -35,30 +32,26 @@ def merge_branches(repo_path, branch_to_merge):
             print(f"An error occurred during merge: {e}")
 
 def handle_merge_conflicts(repo):
-
+    """Handle merge conflicts block by block."""
     print("\nConflicts detected in the following files:")
     conflicts = repo.index.unmerged_blobs()
     resolved_files = []
 
     for file_path in conflicts.keys():
-        if file_path:
-            print(f" - {file_path}")
-            full_file_path = os.path.join(repo.working_tree_dir, file_path)
-            if os.path.isfile(full_file_path):
-                resolved = extract_and_resolve_conflicts_block_by_block(full_file_path)
-                if resolved:
-                    resolved_files.append(file_path)
-                else:
-                    print(f"Could not resolve conflicts in '{file_path}'.")
+        print(f" - {file_path}")
+        full_file_path = os.path.join(repo.working_tree_dir, file_path)
+
+        if os.path.isfile(full_file_path):
+            resolved = extract_and_resolve_conflicts_block_by_block(full_file_path)
+            if resolved:
+                resolved_files.append(file_path)
             else:
-                print(f"Error: '{full_file_path}' is not a valid file.")
-        else:
-            print("Warning: Encountered an empty file path in conflicts.")
+                print(f"Could not resolve conflicts in '{file_path}'.")
 
     if resolved_files:
         repo.git.add(resolved_files)
         try:
-            repo.index.commit(f"Merge resolved by GitAssistant")
+            repo.index.commit("Merge resolved by GitAssistant")
             print("\nMerge conflicts resolved and committed.")
         except Exception as e:
             print(f"An error occurred while committing the merge: {e}")
@@ -66,7 +59,7 @@ def handle_merge_conflicts(repo):
         print("No conflicts were resolved.")
 
 def extract_and_resolve_conflicts_block_by_block(file_path):
-
+    """Extract and resolve merge conflicts block by block."""
     conflict_start = '<<<<<<<'
     conflict_mid = '======='
     conflict_end = '>>>>>>>'
@@ -76,42 +69,42 @@ def extract_and_resolve_conflicts_block_by_block(file_path):
             lines = file.readlines()
 
         new_lines = []
-        i = 0
         conflicts_found = False
+        i = 0
 
         while i < len(lines):
             line = lines[i]
             if line.startswith(conflict_start):
                 conflicts_found = True
-                conflict_block = {
-                    'ours': [],
-                    'theirs': []
-                }
 
+                # Extract "ours" block
+                conflict_block = {'ours': [], 'theirs': []}
                 i += 1
                 while i < len(lines) and not lines[i].startswith(conflict_mid):
                     conflict_block['ours'].append(lines[i])
                     i += 1
 
-                i += 1  
-
+                # Extract "theirs" block
+                i += 1
                 while i < len(lines) and not lines[i].startswith(conflict_end):
                     conflict_block['theirs'].append(lines[i])
                     i += 1
 
-                i += 1  
+                i += 1  # Skip the end marker (>>>>>>>)
 
-                print(f"\nConflict in file '{os.path.basename(file_path)}':")
-                print(">>> Current changes (in your branch):")
-                for idx, content in enumerate(conflict_block['ours'], start=1):
-                    print(f"Line {idx}: {content.rstrip()}")
+                # Show conflict block to the user
+                print("\nConflict detected in:")
+                print(">>> Your changes (ours):")
+                for idx, line in enumerate(conflict_block['ours'], start=1):
+                    print(f"{idx}: {line.strip()}")
 
-                print(">>> Incoming changes (from the branch being merged):")
-                for idx, content in enumerate(conflict_block['theirs'], start=1):
-                    print(f"Line {idx}: {content.rstrip()}")
+                print(">>> Incoming changes (theirs):")
+                for idx, line in enumerate(conflict_block['theirs'], start=1):
+                    print(f"{idx}: {line.strip()}")
 
+                # Ask user what they want to keep
                 while True:
-                    choice = input("Choose which changes to keep for this block? (o)urs, (t)heirs, (b)oth, (e)dit manually: ").lower()
+                    choice = input("Choose (o)urs, (t)heirs, (b)oth, or (e)dit manually: ").lower()
                     if choice == 'o':
                         new_lines.extend(conflict_block['ours'])
                         break
@@ -119,17 +112,16 @@ def extract_and_resolve_conflicts_block_by_block(file_path):
                         new_lines.extend(conflict_block['theirs'])
                         break
                     elif choice == 'b':
-                        new_lines.extend(conflict_block['ours'])
-                        new_lines.extend(conflict_block['theirs'])
+                        new_lines.extend(conflict_block['ours'] + conflict_block['theirs'])
                         break
                     elif choice == 'e':
-                        print("Enter your custom changes for this block. Finish by entering a single '.' on a new line.")
+                        print("Enter custom changes. Type a single '.' on a new line to finish.")
                         custom_block = []
                         while True:
-                            user_line = input()
-                            if user_line == '.':
+                            user_input = input()
+                            if user_input == '.':
                                 break
-                            custom_block.append(user_line + '\n')
+                            custom_block.append(user_input + '\n')
                         new_lines.extend(custom_block)
                         break
                     else:
@@ -146,5 +138,5 @@ def extract_and_resolve_conflicts_block_by_block(file_path):
             print(f"No conflict markers found in '{file_path}'.")
             return False
     except Exception as e:
-        print(f"Error reading file '{file_path}': {e}")
+        print(f"Error processing conflicts in '{file_path}': {e}")
         return False

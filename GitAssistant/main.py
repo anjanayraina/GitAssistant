@@ -1,9 +1,7 @@
-# main.py
-
 import os
 from scanner import scan_repository
 from git_ignore_manager import update_gitignore
-from merge_helper import merge_branches , current_active_branch
+from merge_helper import merge_branches, current_active_branch
 
 def main():
     repo_path = input("Enter the path to your local Git repository: ").strip()
@@ -19,8 +17,10 @@ def main():
             print(f" - {file}")
     else:
         print("No sensitive files detected.")
+
     head = current_active_branch(repo_path)
-    print(f"Current active branch : {head}")
+    print(f"Current active branch: {head}")
+
     if sensitive_data:
         print("Files containing sensitive data detected:")
         for file in set(sensitive_data):

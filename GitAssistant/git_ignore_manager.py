@@ -1,4 +1,3 @@
-# GitAssistant/gitignore_manager.py
 
 import os
 import re
